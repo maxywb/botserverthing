@@ -1,0 +1,175 @@
+#include <NewSoftSerial.h>
+#include <LiquidCrystal.h>
+#include <Servo.h>
+
+struct Command{
+  uint8_t cmd;
+  uint8_t value;
+};
+
+
+#define NONE (0)
+#define FWD  (1)
+#define REV  (2)
+#define STOP (3)
+#define STEER (4)
+#define RESET (5)
+#define PING (255)
+
+// motor pins
+#define DIR 8 
+#define PWM 9
+#define RESET 10
+#define FF1 11
+#define FF2 12
+
+// motor faults
+#define NONE 0
+#define SHORT 1
+#define OVER_TEMP 2
+#define UNDER_VOLT 3
+#define UNKNOWN -2
+
+// servo stuff
+#define WHEEL_PIN (7)
+
+#ifdef DEBUG
+LCDKeypad lcd;
+#endif
+
+NewSoftSerial mySerial(0,1);
+uint8_t curFault;
+Command curCmd;
+uint8_t curSpeed = 0;
+Servo wheel;
+
+uint8_t readFaults(){
+  uint8_t ff1 = digitalRead(FF1);
+  uint8_t ff2 = digitalRead(FF2);
+
+  if(ff1+ff2 == 0){
+    return NONE;
+  }else if(ff1+ff2 == 1){
+    if(ff1 == HIGH)
+      return OVER_TEMP;
+    else
+      return SHORT;
+  }else if(ff1+ff2 == 2){
+    return UNDER_VOLT;
+  }else{
+    return -2;
+  }
+}
+
+uint8_t resetMotor(){
+  digitalWrite(RESET,LOW);
+  delay(100);
+  digitalWrite(RESET,HIGH);
+  return readFaults();
+}
+
+/*
+ * drives the motor using locked-antiphase control
+ */
+uint8_t drive(uint8_t dir, uint8_t speed){
+  if(speed > 128)
+    return -1;
+  
+  switch(dir){
+  case FWD:
+    digitalWrite(PWM,HIGH);
+    analogWrite(DIR,128+speed);
+    break;
+  case REV:
+    digitalWrite(PWM,HIGH);
+    analogWrite(DIR,128-speed);
+    break;
+  case STOP:
+    digitalWrite(PWM,HIGH);
+    analogWrite(DIR,128);
+    break;
+  default: // if i don't understand what's going on, why should i drive?
+    digitalWrite(PWM,HIGH);
+    analogWrite(DIR,128);
+    break;
+  }
+  return readFaults();
+}
+
+void steer(uint8_t direction){
+  wheel.write(direction);
+}
+
+void replyCmd(){
+  uint32_t response = 0xface0000;
+  response = response | (curCmd.cmd << 16);
+  response = response | (curCmd.value << 8);
+  response = response | curFault;
+  mySerial.println(response);
+}
+
+void setup()  
+{
+  // motor setup
+  pinMode(DIR,OUTPUT);
+  pinMode(PWM,OUTPUT);
+  pinMode(RESET,OUTPUT);
+  pinMode(FF1,INPUT);
+  pinMode(FF2,INPUT);
+  resetMotor();
+
+  // steering setup
+  wheel.attach(WHEEL_PIN);
+
+  // communication setup
+  mySerial.begin(9600);
+  Serial.begin(9600);
+}
+
+void loop() // run over and over
+{
+  if (mySerial.available() >= sizeof(Command)){
+    curCmd.cmd = mySerial.read();
+    curCmd.value = mySerial.read();
+    mySerial.flush();
+    
+  } else {
+    curCmd.cmd = NONE;
+    curCmd.value = -1;
+
+  }
+
+  switch(curCmd.cmd){
+  case FWD:
+    curFault = drive(FWD,curCmd.value);
+    break;
+  case REV:    
+    curFault = drive(REV,curCmd.value);
+    break;
+  case STOP:
+    drive(STOP,0);
+    break;
+  case STEER:
+    steer(curCmd.value);
+  case NONE:
+    break;
+  case RESET:
+    resetMotor();
+    break;
+  case PING:
+    mySerial.println("hello_world");
+    break;
+  default:
+    break;
+  }
+
+  if(curFault != 0){
+    mySerial.print("fault: ");
+    mySerial.println(curFault,DEC);
+    drive(STOP,0);
+  }
+  
+  Serial.println(curCmd.cmd,DEC);
+  Serial.println(curCmd.value,DEC);
+  delay(1000);
+}
