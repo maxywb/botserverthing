@@ -1,0 +1,36 @@
+#include <SoftwareSerial.h>
+#include <LiquidCrystal.h>
+
+
+SoftwareSerial mySerial(0,1);
+
+void setup()  
+{
+  mySerial.begin(9600);
+  delay(1000);
+}
+
+char buf[256];
+
+void loop() // run over and over
+{
+
+  buf[0] = 'f';
+  buf[1] = 'a';
+  buf[2] = 'c';
+  buf[3] = 'e';
+  int i = 0;
+  bool found = false;
+
+  while(mySerial.available()){
+    found = true;
+    buf[i] = mySerial.read();
+    i++;
+  }
+
+  if(found){
+    mySerial.print(buf);
+    mySerial.print("\n");
+    mySerial.flush();
+  } 
+}
