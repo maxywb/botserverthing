@@ -1,4 +1,5 @@
 # local imports
+import IRCMessage
 # module imports
 # language imports
 import socket
@@ -8,6 +9,7 @@ class IRCConnector:
 ## private
     def __init__(self):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._messageFactory = IRCMessage.IRCMessageFactory()
 
     def _readLineAndHeartbeat(self):
         c, s = '', ''
@@ -17,24 +19,25 @@ class IRCConnector:
                 break
             s += c
         line = s.strip('\r\n')
-        print line
 
         if line.split(':')[0] == 'PING ':
-            _lsend('PONG :%s' % line.split(':')[1])
-            return _lrecv()
+            self._sendLine('PONG :%s' % line.split(':')[1])
+            return self._readLineAndHeartbeat()
+
         return line
 
     def _sendLine(self,message):
+        print "sending:",message
         self._socket.send(message + '\r\n')
 
 ## public
 
     def readIRCMessage(self):
         line = self._readLineAndHeartbeat()[1:]
-        return line
+        return self._messageFactory.parseAndMakeMessage(line)
 
-    def writeIRCMessage(self, messageType, message):        
-        self._sendLine("%: %"%(messageType, message))
+    def writeIRCMessage(self, messageType, destination, message):        
+        self._sendLine("%s %s :%s"%(messageType, destination, message))
 
     def connectToRizon(self):
         self._socket.connect(("irc.rizon.net",6667))
@@ -58,4 +61,4 @@ class IRCConnector:
         self._sendLine('JOIN #/g/spam')
 
     
-    # /IRCConnector
+# /IRCConnector
