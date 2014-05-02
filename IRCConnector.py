@@ -1,14 +1,18 @@
-# local imports
+import Connection
 import IRCMessage
-# module imports
-# language imports
+
+from collections import deque
+from Queue import Queue
 import socket
+import threading
+import time
 
-class IRCConnector:
-
+class IRCConnection(Connection.Connection):
 ## private
     def __init__(self):
+        super(IRCConnection,self).__init__()
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.settimeout(1)
         self._messageFactory = IRCMessage.IRCMessageFactory()
 
     def _readLineAndHeartbeat(self):
@@ -30,15 +34,39 @@ class IRCConnector:
         print "sending:",message
         self._socket.send(message + '\r\n')
 
-## public
+    def _readIRCMessage(self):
+        try:
+            line = self._readLineAndHeartbeat()[1:]
+        except:
+            return None
 
-    def readIRCMessage(self):
-        line = self._readLineAndHeartbeat()[1:]
-        return self._messageFactory.parseAndMakeMessage(line)
+        messageTime = time.time()
+        return self._messageFactory.parseAndMakeMessage(messageTime,line)
 
-    def writeIRCMessage(self, messageType, destination, message):        
+    def _writeIRCMessage(self, messageType, destination, message):        
         self._sendLine("%s %s :%s"%(messageType, destination, message))
 
+## public
+
+    def run(self):
+        while not self._stop:
+
+            while True:
+                message = self._readIRCMessage()
+
+                if message: 
+                    self._incommingMutex.acquire()
+                    self._incommingMessages.append(message)
+                    self._incommingMutex.release()
+                else:
+                    break
+
+            self._outgoingMutex.acquire()
+            for msg in self._outgoingMessages:
+                self._writeIRCMessage(msg.code,msg.destination,msg.message)
+            self._outgoingMessages.clear()
+            self._outgoingMutex.release()
+            
     def connectToRizon(self):
         self._socket.connect(("irc.rizon.net",6667))
 
@@ -46,19 +74,18 @@ class IRCConnector:
         self._sendLine('NICK radmobile 0')
         
         while True:
-            response = self._readLineAndHeartbeat()
+            try:
+                response = self._readLineAndHeartbeat()
+            except:
+                continue
             message = response.split(":")[0]
             code = response.split(' ')[1]
 
             if code == '001':
                 break
-            elif code == '433':
-                nick(_nickname + '_')
             else:
                 continue
 
         self._sendLine('PRIVMSG NICKSERV :IDENTIFY radicool')
-        self._sendLine('JOIN #/g/spam')
+        #self._sendLine('JOIN #/g/spam')
 
-    
-# /IRCConnector
