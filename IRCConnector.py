@@ -50,22 +50,19 @@ class IRCConnection(Connection.Connection):
 
     def run(self):
         while not self._stop:
-
             while True:
                 message = self._readIRCMessage()
-
                 if message: 
-                    self._incommingMutex.acquire()
-                    self._incommingMessages.append(message)
-                    self._incommingMutex.release()
+                    with self._incommingMutex:
+                        self._incommingMessages.append(message)
                 else:
                     break
 
-            self._outgoingMutex.acquire()
-            for msg in self._outgoingMessages:
-                self._writeIRCMessage(msg.code,msg.destination,msg.message)
-            self._outgoingMessages.clear()
-            self._outgoingMutex.release()
+            with self._outgoingMutex:
+                print "outgoing",len(self._outgoingMessages)
+                for msg in self._outgoingMessages:
+                    self._writeIRCMessage(msg.code,msg.destination,msg.message)
+                self._outgoingMessages.clear()
             
     def connectToRizon(self):
         self._socket.connect(("irc.rizon.net",6667))

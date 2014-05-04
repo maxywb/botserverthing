@@ -1,7 +1,7 @@
 import Connection
 import IRCConnector
 import IRCMessage
-import MessageWatcher
+import IRCWatcher
 
 import time
 import sys
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     threads.append(con)
     
     print "start watcher"
-    bot = MessageWatcher.MessageWatcher(con)
+    bot = IRCWatcher.IRCWatcher(con)
     bot.start()
     threads.append(bot)
     

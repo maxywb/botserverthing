@@ -2,9 +2,8 @@ import threading
 
 class Watcher(threading.Thread):
 ## private
-    def __init__(self,con):
+    def __init__(self):
         super(Watcher,self).__init__()
-        self._connection = con
         self._stop = False
 
 ## public
